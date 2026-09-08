@@ -1,13 +1,13 @@
-// Pure sweep logic for bb-plugin-auto-archive.
+// Pure sweep logic for rift-plugin-auto-archive.
 //
-// Kept free of the plugin API so it is unit-testable without a bb server.
+// Kept free of the plugin API so it is unit-testable without a rift server.
 // The factory in server.ts wires these functions to settings, the background
 // sweeper, and the CLI.
 
 export const HOUR_MS = 60 * 60_000;
 export const DAY_MS = 24 * HOUR_MS;
 
-/** Thread fields the sweep reads. Structurally compatible with bb's thread
+/** Thread fields the sweep reads. Structurally compatible with rift's thread
  * list entries, so full entries satisfy this shape. */
 export interface ThreadActivitySnapshot {
   id: string;
@@ -15,7 +15,7 @@ export interface ThreadActivitySnapshot {
   pinnedAt: number | null;
   deletedAt: number | null;
   visibility: "visible" | "hidden";
-  status: "error" | "stopping" | "idle" | "starting" | "active";
+  status: "pending" | "error" | "stopping" | "idle" | "starting" | "active";
   parentThreadId: string | null;
   latestAttentionAt: number;
 }
@@ -50,7 +50,7 @@ export interface SweepStats {
  *
  * A thread is a candidate when it has been completely quiet for the full
  * inactivity window:
- * - `latestAttentionAt` is bb's last-activity marker: the most recent turn
+ * - `latestAttentionAt` is rift's last-activity marker: the most recent turn
  *   completion, error, or creation time. It does not move on read-state or
  *   metadata changes, so opening a thread never counts as activity.
  * - Child threads are never selected directly: archiving a parent cascades

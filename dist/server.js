@@ -61,7 +61,7 @@ function sleep(ms, signal) {
 
 // server.ts
 var PAGE_SIZE = 100;
-async function runSweep(bb, config, options = {}) {
+async function runSweep(rift, config, options = {}) {
   const now = options.now ?? Date.now();
   const dryRun = options.dryRun ?? config.dryRun;
   const stats = {
@@ -74,7 +74,7 @@ async function runSweep(bb, config, options = {}) {
   const candidates = [];
   let offset = 0;
   while (!options.signal?.aborted) {
-    const page = await bb.sdk.threads.list({
+    const page = await rift.sdk.threads.list({
       archived: false,
       includeHidden: true,
       hasParent: false,
@@ -95,21 +95,21 @@ async function runSweep(bb, config, options = {}) {
   for (const candidate of candidates) {
     if (options.signal?.aborted) break;
     if (dryRun) {
-      bb.log.info(`[dry-run] would archive ${candidate.id} \u2014 ${candidate.label}`);
+      rift.log.info(`[dry-run] would archive ${candidate.id} \u2014 ${candidate.label}`);
       continue;
     }
     try {
-      await bb.sdk.threads.archive({ threadId: candidate.id });
+      await rift.sdk.threads.archive({ threadId: candidate.id });
       stats.archived += 1;
-      bb.log.info(`archived ${candidate.id} \u2014 ${candidate.label}`);
+      rift.log.info(`archived ${candidate.id} \u2014 ${candidate.label}`);
     } catch (error) {
       stats.errors += 1;
-      bb.log.error(
+      rift.log.error(
         `failed to archive ${candidate.id} \u2014 ${errorMessage(error)}`
       );
     }
   }
-  await bb.storage.kv.set("last-sweep", { at: now, ...stats });
+  await rift.storage.kv.set("last-sweep", { at: now, ...stats });
   return stats;
 }
 function threadTitle(thread) {
@@ -118,9 +118,9 @@ function threadTitle(thread) {
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
-async function plugin(bb) {
-  bb.log.info("loaded");
-  const settings = bb.settings.define({
+async function plugin(rift) {
+  rift.log.info("loaded");
+  const settings = rift.settings.define({
     inactivityDays: {
       type: "string",
       label: "Inactivity threshold (days)",
@@ -154,7 +154,7 @@ async function plugin(bb) {
   });
   async function resolveConfig() {
     const values = await settings.get();
-    const installedAt = await ensureInstalledAt(bb);
+    const installedAt = await ensureInstalledAt(rift);
     return {
       inactivityDays: parseInactivityDays(values.inactivityDays),
       archivePinned: values.archivePinned,
@@ -164,35 +164,35 @@ async function plugin(bb) {
       sinceInstallAt: installedAt
     };
   }
-  bb.background.service("sweeper", {
+  rift.background.service("sweeper", {
     async start(signal) {
       while (!signal.aborted) {
         const config = await resolveConfig();
         try {
-          const stats = await runSweep(bb, config, { signal });
-          bb.log.info(
+          const stats = await runSweep(rift, config, { signal });
+          rift.log.info(
             `sweep complete \u2014 scanned ${stats.scanned}, archived ${stats.archived}, errors ${stats.errors}${stats.dryRun ? " (dry run)" : ""}`
           );
         } catch (error) {
-          bb.log.error(`sweep failed: ${errorMessage(error)}`);
+          rift.log.error(`sweep failed: ${errorMessage(error)}`);
         }
         await sleep(msUntilNextHour(), signal);
       }
     }
   });
-  bb.cli.register({
+  rift.cli.register({
     name: "auto-archive",
     summary: "Auto-archive threads with no recent activity",
     commands: [
       {
         name: "run",
         summary: "Run an archive sweep now",
-        usage: "bb auto-archive run [--dry-run]"
+        usage: "rift auto-archive run [--dry-run]"
       },
       {
         name: "status",
         summary: "Show the last sweep result and current configuration",
-        usage: "bb auto-archive status"
+        usage: "rift auto-archive status"
       }
     ],
     async run(argv, ctx) {
@@ -200,7 +200,7 @@ async function plugin(bb) {
       if (sub === "run") {
         const config = await resolveConfig();
         const stats = await runSweep(
-          bb,
+          rift,
           {
             ...config,
             dryRun: rest.includes("--dry-run") ? true : config.dryRun
@@ -214,7 +214,7 @@ async function plugin(bb) {
       }
       if (sub === "status") {
         const config = await resolveConfig();
-        const last = await bb.storage.kv.get("last-sweep");
+        const last = await rift.storage.kv.get("last-sweep");
         const lines = [
           `threshold: ${config.inactivityDays} day(s)`,
           `archive pinned: ${config.archivePinned}`,
@@ -235,7 +235,7 @@ async function plugin(bb) {
       }
       return {
         exitCode: 2,
-        stderr: "usage: bb auto-archive <run|status>"
+        stderr: "usage: rift auto-archive <run|status>"
       };
     }
   });
@@ -245,14 +245,14 @@ function formatStats(stats) {
   return `scanned ${stats.scanned}, candidates ${stats.candidates}, archived ${stats.archived}, errors ${stats.errors}${suffix}`;
 }
 var INSTALLED_AT_KEY = "installed-at";
-async function ensureInstalledAt(bb) {
-  const existing = await bb.storage.kv.get(INSTALLED_AT_KEY);
+async function ensureInstalledAt(rift) {
+  const existing = await rift.storage.kv.get(INSTALLED_AT_KEY);
   if (typeof existing === "number") {
     return existing;
   }
   const now = Date.now();
-  await bb.storage.kv.set(INSTALLED_AT_KEY, now);
-  bb.log.info(
+  await rift.storage.kv.set(INSTALLED_AT_KEY, now);
+  rift.log.info(
     `first run \u2014 recording install time ${new Date(now).toISOString()}; threads that were already idle before install will never be auto-archived`
   );
   return now;

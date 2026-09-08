@@ -1,33 +1,27 @@
 {
-  "name": "bb-plugin-auto-archive",
+  "name": "rift-plugin-auto-archive",
   "version": "0.1.4",
   "description": "Auto-archives threads that have seen no activity for a configurable number of days.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/slogsdon/bb-plugin-auto-archive.git"
+    "url": "git+https://github.com/euforicio/rift-plugin-auto-archive.git"
   },
   "type": "module",
   "engines": {
-    "bb": ">=0.38",
-    "bbPluginSdk": ">=0.4.6"
-  },
-  "bb": {
-    "name": "Auto Archive",
-    "description": "Auto-archives threads that have seen no activity for a configurable number of days.",
-    "branding": {
-      "icon": "Archive"
-    },
-    "server": "./server.ts"
+    "rift": ">=0.38",
+    "riftPluginSdk": ">=0.4.48"
   },
   "dependencies": {
     "zod": "^4.3.6"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "rift plugin build .",
+    "types": "rift plugin types . --check"
   },
   "devDependencies": {
-    "@get-bb/plugin-sdk": "0.4.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -35,11 +29,25 @@
     "cron-parser": "^5.10.0",
     "hono": "^4.11.9",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "@riftlabs/plugin-sdk": "0.4.48"
   },
   "files": [
     "dist",
     "server.ts",
     "sweep.ts"
-  ]
+  ],
+  "rift": {
+    "name": "Auto Archive",
+    "description": "Auto-archives threads that have seen no activity for a configurable number of days.",
+    "branding": {
+      "icon": "Archive"
+    },
+    "server": "./server.ts"
+  },
+  "author": "Rift Labs",
+  "homepage": "https://riftlabs.app",
+  "bugs": {
+    "url": "https://github.com/euforicio/rift-plugin-auto-archive/issues"
+  }
 }

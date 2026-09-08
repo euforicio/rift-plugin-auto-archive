@@ -1,6 +1,6 @@
-// Backend + pure-logic tests for bb-plugin-auto-archive.
+// Backend + pure-logic tests for rift-plugin-auto-archive.
 import { describe, expect, it, vi } from "vitest";
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import { createFakePluginHost } from "@riftlabs/plugin-sdk/testing";
 import plugin, { runSweep, type ResolvedSweepConfig } from "./server";
 import {
   DAY_MS,
@@ -118,7 +118,7 @@ describe("selectThreadsToArchive", () => {
   });
 
   it("skips running threads unless archiveRunning is set", () => {
-    for (const status of ["starting", "active", "stopping"] as const) {
+    for (const status of ["pending", "starting", "active", "stopping"] as const) {
       const running = thread({ id: `th_${status}`, status });
       expect(selectThreadsToArchive([running], config(), NOW)).toEqual([]);
       expect(
@@ -182,7 +182,7 @@ function makeHost(entries: TestThread[]) {
 
 describe("runSweep", () => {
   it("archives only stale visible idle roots, in one pass", async () => {
-    const { bb, harness } = makeHost([
+    const { rift, harness } = makeHost([
       thread({ id: "th_stale" }),
       thread({ id: "th_fresh", latestAttentionAt: NOW - DAY_MS }),
       thread({ id: "th_pinned", pinnedAt: NOW - 1 }),
@@ -190,9 +190,9 @@ describe("runSweep", () => {
       thread({ id: "th_active", status: "active" }),
       thread({ id: "th_child", parentThreadId: "th_parent" }),
     ]);
-    await plugin(bb);
+    await plugin(rift);
 
-    const stats = await runSweep(bb, config(), { now: NOW });
+    const stats = await runSweep(rift, config(), { now: NOW });
 
     expect(stats).toMatchObject({
       scanned: 6,
@@ -204,7 +204,7 @@ describe("runSweep", () => {
     expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([
       [{ threadId: "th_stale" }],
     ]);
-    const lastSweep = await bb.storage.kv.get("last-sweep");
+    const lastSweep = await rift.storage.kv.get("last-sweep");
     expect(lastSweep).toMatchObject({ at: NOW, archived: 1 });
   });
 
@@ -213,24 +213,24 @@ describe("runSweep", () => {
       thread({ id: `th_${i}`, latestAttentionAt: NOW - 1 }),
     );
     // First page: all fresh → no candidates; second page has one stale.
-    const { bb } = makeHost([
+    const { rift } = makeHost([
       ...fullPage,
       thread({ id: "th_tail", latestAttentionAt: NOW - 3 * DAY_MS }),
     ]);
-    await plugin(bb);
+    await plugin(rift);
 
-    const stats = await runSweep(bb, config(), { now: NOW });
+    const stats = await runSweep(rift, config(), { now: NOW });
 
     expect(stats.scanned).toBe(101);
     expect(stats.archived).toBe(1);
-    expect(bb.sdk.threads.list).not.toBeUndefined();
+    expect(rift.sdk.threads.list).not.toBeUndefined();
   });
 
   it("honours dry run: logs candidates, archives nothing", async () => {
-    const { bb, harness } = makeHost([thread({ id: "th_stale" })]);
-    await plugin(bb);
+    const { rift, harness } = makeHost([thread({ id: "th_stale" })]);
+    await plugin(rift);
 
-    const stats = await runSweep(bb, config({ dryRun: true }), { now: NOW });
+    const stats = await runSweep(rift, config({ dryRun: true }), { now: NOW });
 
     expect(stats).toMatchObject({ candidates: 1, archived: 0, dryRun: true });
     expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([]);
@@ -257,10 +257,10 @@ describe("runSweep", () => {
         },
       },
     });
-    const { bb } = host;
-    await plugin(bb);
+    const { rift } = host;
+    await plugin(rift);
 
-    const stats = await runSweep(bb, config(), { now: NOW });
+    const stats = await runSweep(rift, config(), { now: NOW });
 
     expect(stats).toMatchObject({ candidates: 2, archived: 1, errors: 1 });
   });
@@ -268,8 +268,8 @@ describe("runSweep", () => {
 
 describe("factory registrations", () => {
   it("registers the sweeper service, settings, and CLI", async () => {
-    const { bb, harness } = makeHost([]);
-    await plugin(bb);
+    const { rift, harness } = makeHost([]);
+    await plugin(rift);
 
     expect(
       harness.registrations.services.some((s) => s.name === "sweeper"),
@@ -286,14 +286,14 @@ describe("factory registrations", () => {
   });
 
   it("sweeper first run records install time and leaves a backlog alone", async () => {
-    const { bb, harness } = makeHost([thread({ id: "th_stale" })]);
-    await plugin(bb);
+    const { rift, harness } = makeHost([thread({ id: "th_stale" })]);
+    await plugin(rift);
 
     const { controller, done } = harness.behavior.runService("sweeper");
     // Wait until the first sweep has recorded the install time (which is what
     // also runs the guard), then confirm the pre-install backlog was untouched.
     await vi.waitFor(async () => {
-      expect(await bb.storage.kv.get("installed-at")).toBeTypeOf("number");
+      expect(await rift.storage.kv.get("installed-at")).toBeTypeOf("number");
     });
     expect(harness.inspection.sdk.callsTo("threads.archive")).toEqual([]);
     controller.abort();
@@ -301,10 +301,10 @@ describe("factory registrations", () => {
   });
 
   it("sweeper archives backlog once the install guard has elapsed", async () => {
-    const { bb, harness } = makeHost([thread({ id: "th_stale" })]);
+    const { rift, harness } = makeHost([thread({ id: "th_stale" })]);
     // Installed well before the stale thread's last activity.
-    await bb.storage.kv.set("installed-at", NOW - 10 * DAY_MS);
-    await plugin(bb);
+    await rift.storage.kv.set("installed-at", NOW - 10 * DAY_MS);
+    await plugin(rift);
 
     const { controller, done } = harness.behavior.runService("sweeper");
     await vi.waitFor(() => {
@@ -317,9 +317,9 @@ describe("factory registrations", () => {
   });
 
   it("CLI status shows configuration and last sweep", async () => {
-    const { bb, harness } = makeHost([thread({ id: "th_stale" })]);
-    await plugin(bb);
-    await runSweep(bb, config(), { now: NOW });
+    const { rift, harness } = makeHost([thread({ id: "th_stale" })]);
+    await plugin(rift);
+    await runSweep(rift, config(), { now: NOW });
 
     const result = await harness.behavior.runCli(["status"]);
 
@@ -329,8 +329,8 @@ describe("factory registrations", () => {
   });
 
   it("CLI run --dry-run overrides the config dry-run flag", async () => {
-    const { bb, harness } = makeHost([thread({ id: "th_stale" })]);
-    await plugin(bb);
+    const { rift, harness } = makeHost([thread({ id: "th_stale" })]);
+    await plugin(rift);
 
     const result = await harness.behavior.runCli(["run", "--dry-run"]);
 

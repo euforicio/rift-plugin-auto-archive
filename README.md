@@ -24,7 +24,7 @@ on, waiting on, or keeping handy gets touched.
 ## Quickstart
 
 ```sh
-bb plugin install git:https://github.com/slogsdon/bb-plugin-auto-archive.git
+rift plugin install git:https://github.com/euforicio/rift-plugin-auto-archive.git
 ```
 
 That's it — the plugin records an install timestamp and sweeps hourly. Check
@@ -66,11 +66,11 @@ A thread is only a candidate when *all* of these hold:
 ## Configuration
 
 ```sh
-bb plugin config auto-archive set inactivityDays 3     # threshold (days), default 2
-bb plugin config auto-archive set archivePinned true   # also archive pinned threads
-bb plugin config auto-archive set archiveHidden true   # also archive hidden workers
-bb plugin config auto-archive set archiveRunning true  # also archive running work
-bb plugin config auto-archive set dryRun true          # log candidates, never archive
+rift plugin config auto-archive set inactivityDays 3     # threshold (days), default 2
+rift plugin config auto-archive set archivePinned true   # also archive pinned threads
+rift plugin config auto-archive set archiveHidden true   # also archive hidden workers
+rift plugin config auto-archive set archiveRunning true  # also archive running work
+rift plugin config auto-archive set dryRun true          # log candidates, never archive
 ```
 
 Settings are re-read on every sweep, so changes apply on the next hourly run
@@ -93,16 +93,22 @@ bb auto-archive status         # configuration + last sweep result
 - Each sweep pages through non-archived root threads, selects stale
   candidates, archives them one at a time (a failure is logged and counted,
   the rest continue), and records the outcome for `bb auto-archive status`.
-- Per-thread and per-sweep logs: `bb plugin logs auto-archive`.
+- Per-thread and per-sweep logs: `rift plugin logs auto-archive`.
 
 ## Development
 
 ```sh
 npm test          # vitest: pure sweep logic + fake-host backend tests
 npx tsc --noEmit  # typecheck
-bb plugin build   # emit dist/ before publishing
+rift plugin build   # emit dist/ before publishing
 ```
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Rift fork
+
+Maintained by Rift Labs for [Rift](https://riftlabs.app). Original source: [slogsdon/bb-plugin-auto-archive](https://github.com/slogsdon/bb-plugin-auto-archive). Original license and attribution are preserved.
+
+Use `npm ci` for the pinned SDK artifact; its provenance is in [vendor/README.md](vendor/README.md).

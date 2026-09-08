@@ -1,7 +1,7 @@
-// bb-plugin-auto-archive — backend entry.
+// rift-plugin-auto-archive — backend entry.
 //
 // Sweeps all root threads on load and then hourly, archiving any that have
-// had no activity for the configured number of days. Activity is bb's
+// had no activity for the configured number of days. Activity is rift's
 // `latestAttentionAt` (last turn completion / error / creation) — reads and
 // metadata edits never count. Child threads are never archived directly:
 // archiving a parent cascades to its children.
@@ -9,7 +9,7 @@
 // Everything destructive is configurable: pinned/hidden/running threads are
 // skipped by default, and a dry-run mode logs candidates without touching
 // them.
-import type { BbPluginApi } from "@get-bb/plugin-sdk";
+import type { RiftPluginApi } from "@riftlabs/plugin-sdk";
 import {
   HOUR_MS,
   msUntilNextHour,
@@ -39,10 +39,10 @@ const PAGE_SIZE = 100;
 /**
  * Run one archive sweep: page through non-archived root threads (hidden
  * included so the config can decide), select stale ones, archive them, and
- * record the outcome in kv for `bb auto-archive status`.
+ * record the outcome in kv for `rift auto-archive status`.
  */
 export async function runSweep(
-  bb: BbPluginApi,
+  rift: RiftPluginApi,
   config: ResolvedSweepConfig,
   options: RunSweepOptions = {},
 ): Promise<SweepStats> {
@@ -61,7 +61,7 @@ export async function runSweep(
   const candidates: { id: string; label: string }[] = [];
   let offset = 0;
   while (!options.signal?.aborted) {
-    const page = await bb.sdk.threads.list({
+    const page = await rift.sdk.threads.list({
       archived: false,
       includeHidden: true,
       hasParent: false,
@@ -83,22 +83,22 @@ export async function runSweep(
   for (const candidate of candidates) {
     if (options.signal?.aborted) break;
     if (dryRun) {
-      bb.log.info(`[dry-run] would archive ${candidate.id} — ${candidate.label}`);
+      rift.log.info(`[dry-run] would archive ${candidate.id} — ${candidate.label}`);
       continue;
     }
     try {
-      await bb.sdk.threads.archive({ threadId: candidate.id });
+      await rift.sdk.threads.archive({ threadId: candidate.id });
       stats.archived += 1;
-      bb.log.info(`archived ${candidate.id} — ${candidate.label}`);
+      rift.log.info(`archived ${candidate.id} — ${candidate.label}`);
     } catch (error) {
       stats.errors += 1;
-      bb.log.error(
+      rift.log.error(
         `failed to archive ${candidate.id} — ${errorMessage(error)}`,
       );
     }
   }
 
-  await bb.storage.kv.set("last-sweep", { at: now, ...stats });
+  await rift.storage.kv.set("last-sweep", { at: now, ...stats });
   return stats;
 }
 
@@ -113,10 +113,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export default async function plugin(bb: BbPluginApi) {
-  bb.log.info("loaded");
+export default async function plugin(rift: RiftPluginApi) {
+  rift.log.info("loaded");
 
-  const settings = bb.settings.define({
+  const settings = rift.settings.define({
     inactivityDays: {
       type: "string",
       label: "Inactivity threshold (days)",
@@ -161,7 +161,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   async function resolveConfig(): Promise<ResolvedSweepConfig> {
     const values = await settings.get();
-    const installedAt = await ensureInstalledAt(bb);
+    const installedAt = await ensureInstalledAt(rift);
     return {
       inactivityDays: parseInactivityDays(values.inactivityDays),
       archivePinned: values.archivePinned,
@@ -173,38 +173,38 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   // Sweep once on load, then at the top of every hour. Settings are re-read
-  // per sweep so a `bb plugin config` change applies on the next run.
-  bb.background.service("sweeper", {
+  // per sweep so a `rift plugin config` change applies on the next run.
+  rift.background.service("sweeper", {
     async start(signal) {
       while (!signal.aborted) {
         const config = await resolveConfig();
         try {
-          const stats = await runSweep(bb, config, { signal });
-          bb.log.info(
+          const stats = await runSweep(rift, config, { signal });
+          rift.log.info(
             `sweep complete — scanned ${stats.scanned}, archived ${stats.archived}, ` +
               `errors ${stats.errors}${stats.dryRun ? " (dry run)" : ""}`,
           );
         } catch (error) {
-          bb.log.error(`sweep failed: ${errorMessage(error)}`);
+          rift.log.error(`sweep failed: ${errorMessage(error)}`);
         }
         await sleep(msUntilNextHour(), signal);
       }
     },
   });
 
-  bb.cli.register({
+  rift.cli.register({
     name: "auto-archive",
     summary: "Auto-archive threads with no recent activity",
     commands: [
       {
         name: "run",
         summary: "Run an archive sweep now",
-        usage: "bb auto-archive run [--dry-run]",
+        usage: "rift auto-archive run [--dry-run]",
       },
       {
         name: "status",
         summary: "Show the last sweep result and current configuration",
-        usage: "bb auto-archive status",
+        usage: "rift auto-archive status",
       },
     ],
     async run(argv, ctx) {
@@ -212,7 +212,7 @@ export default async function plugin(bb: BbPluginApi) {
       if (sub === "run") {
         const config = await resolveConfig();
         const stats = await runSweep(
-          bb,
+          rift,
           {
             ...config,
             dryRun: rest.includes("--dry-run") ? true : config.dryRun,
@@ -226,7 +226,7 @@ export default async function plugin(bb: BbPluginApi) {
       }
       if (sub === "status") {
         const config = await resolveConfig();
-        const last = await bb.storage.kv.get<
+        const last = await rift.storage.kv.get<
           SweepStats & { at: number }
         >("last-sweep");
         const lines = [
@@ -249,7 +249,7 @@ export default async function plugin(bb: BbPluginApi) {
       }
       return {
         exitCode: 2,
-        stderr: "usage: bb auto-archive <run|status>",
+        stderr: "usage: rift auto-archive <run|status>",
       };
     },
   });
@@ -270,14 +270,14 @@ const INSTALLED_AT_KEY = "installed-at";
  * load. The timestamp persists across updates, so a pre-install backlog stays
  * protected even after the plugin is upgraded.
  */
-async function ensureInstalledAt(bb: BbPluginApi): Promise<number> {
-  const existing = await bb.storage.kv.get<number>(INSTALLED_AT_KEY);
+async function ensureInstalledAt(rift: RiftPluginApi): Promise<number> {
+  const existing = await rift.storage.kv.get<number>(INSTALLED_AT_KEY);
   if (typeof existing === "number") {
     return existing;
   }
   const now = Date.now();
-  await bb.storage.kv.set(INSTALLED_AT_KEY, now);
-  bb.log.info(
+  await rift.storage.kv.set(INSTALLED_AT_KEY, now);
+  rift.log.info(
     `first run — recording install time ${new Date(now).toISOString()}; ` +
       "threads that were already idle before install will never be " +
       "auto-archived",
